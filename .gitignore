@@ -1,1 +1,16 @@
 /target
+
+# Local PONG test network configuration
+scripts/test.txt
+Test*.txt
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
