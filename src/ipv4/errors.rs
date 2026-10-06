@@ -1,6 +1,6 @@
 use std::io;
 use std::mem;
-use std::net::Ipv4Addr;
+use std::net::{IpAddr, Ipv4Addr};
 
 use crate::ipv4::constants::ICMP_HEADER_SIZE;
 
@@ -25,7 +25,7 @@ pub fn classify_network_error(error: io::Error) -> PingResult {
 fn classify_icmp_error(
     icmp_type: u8,
     icmp_code: u8,
-    from: Option<Ipv4Addr>,
+    from: Option<IpAddr>,
     info: u32,
 ) -> PingResult {
     match (icmp_type, icmp_code) {
@@ -134,7 +134,7 @@ pub fn read_error_queue(fd: i32) -> Option<QueuedIcmpError> {
                 {
                     let offender = &*(offender_ptr as *const libc::sockaddr_in);
 
-                    Some(Ipv4Addr::from(offender.sin_addr.s_addr.to_ne_bytes()))
+                    Some(Ipv4Addr::from(offender.sin_addr.s_addr.to_ne_bytes()).into())
                 } else {
                     None
                 };

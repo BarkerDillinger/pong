@@ -1,19 +1,27 @@
 use console::style;
-use std::net::Ipv4Addr;
+use std::net::IpAddr;
 use std::time::Duration;
 
 use crate::stats::estimate_hops;
 use crate::types::{PingResult, RouteHop};
 
-pub fn display_target(original: &str, resolved: Ipv4Addr) -> String {
-    if original.parse::<Ipv4Addr>().is_ok() {
+pub fn display_target(original: &str, resolved: impl Into<IpAddr>) -> String {
+    let resolved = resolved.into();
+    if original.parse::<IpAddr>().is_ok() {
         resolved.to_string()
     } else {
         format!("{original} ({resolved})")
     }
 }
 
-pub fn print_result(target: &str, sequence: u16, result: &PingResult, timeout: Duration) {
+pub fn print_result_family(
+    target: &str,
+    sequence: u16,
+    result: &PingResult,
+    timeout: Duration,
+    ipv6: bool,
+) {
+    let limit_label = if ipv6 { "hlim" } else { "ttl" };
     let target_text = style(target).cyan().bold();
     let sequence_text = style(format!("seq={sequence}")).blue().bold();
 
@@ -29,7 +37,7 @@ pub fn print_result(target: &str, sequence: u16, result: &PingResult, timeout: D
                     target_text,
                     style("ALIVE").green().bold(),
                     sequence_text,
-                    style(format!("ttl={ttl}")).cyan().bold(),
+                    style(format!("{limit_label}={ttl}")).cyan().bold(),
                     style(format!("hops≈{hops}")).magenta().bold(),
                     style(format!("time={milliseconds:.3} ms")).green().bold()
                 );
@@ -96,7 +104,7 @@ pub fn print_result(target: &str, sequence: u16, result: &PingResult, timeout: D
             );
         }
 
-        PingResult::FragmentationNeeded { from, mtu } => {
+        PingResult::FragmentationNeeded { from, mtu } | PingResult::PacketTooBig { from, mtu } => {
             let mtu_text = match mtu {
                 Some(mtu) => format!("mtu={mtu}"),
                 None => "mtu=unknown".to_string(),
@@ -105,7 +113,13 @@ pub fn print_result(target: &str, sequence: u16, result: &PingResult, timeout: D
             println!(
                 "{} {} {} {} {}",
                 target_text,
-                style("FRAGMENTATION NEEDED").yellow().bold(),
+                style(if ipv6 {
+                    "PACKET TOO BIG"
+                } else {
+                    "FRAGMENTATION NEEDED"
+                })
+                .yellow()
+                .bold(),
                 sequence_text,
                 style(format_error_source(from)).yellow(),
                 style(mtu_text).yellow().bold()
@@ -136,7 +150,13 @@ pub fn print_result(target: &str, sequence: u16, result: &PingResult, timeout: D
             println!(
                 "{} {} {} {}",
                 target_text,
-                style("TTL EXCEEDED").yellow().bold(),
+                style(if ipv6 {
+                    "HOP LIMIT EXCEEDED"
+                } else {
+                    "TTL EXCEEDED"
+                })
+                .yellow()
+                .bold(),
                 sequence_text,
                 style(format_error_source(from)).yellow().bold()
             );
@@ -282,7 +302,7 @@ pub fn print_route_compact(hop: &RouteHop) {
     }
 }
 
-pub fn format_error_source(from: &Option<Ipv4Addr>) -> String {
+pub fn format_error_source(from: &Option<IpAddr>) -> String {
     match from {
         Some(address) => format!("from={address}"),
         None => String::new(),

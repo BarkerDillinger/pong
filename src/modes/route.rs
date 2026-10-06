@@ -139,11 +139,11 @@ fn run_route(fd: i32, target: Ipv4Addr, target_display: &str, cli: &Cli) -> io::
 
                 PingResult::Alive { rtt, .. } => {
                     if let Some(existing) = route_hop.address {
-                        if existing != target {
+                        if existing != std::net::IpAddr::V4(target) {
                             route_hop.multiple_responders = true;
                         }
                     } else {
-                        route_hop.address = Some(target);
+                        route_hop.address = Some(target.into());
                     }
 
                     route_hop.rtts.push(rtt);

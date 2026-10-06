@@ -1,4 +1,4 @@
-use std::net::Ipv4Addr;
+use std::net::{IpAddr, Ipv4Addr};
 use std::time::{Duration, Instant};
 
 pub struct PingStats {
@@ -17,7 +17,7 @@ pub struct QueuedIcmpError {
 
 pub struct RouteHop {
     pub hop: u8,
-    pub address: Option<Ipv4Addr>,
+    pub address: Option<IpAddr>,
     pub hostname: Option<String>,
     pub rtts: Vec<Duration>,
     pub probes_sent: u32,
@@ -66,41 +66,46 @@ pub enum PingResult {
     NoResponse,
 
     NetworkUnreachable {
-        from: Option<Ipv4Addr>,
+        from: Option<IpAddr>,
     },
 
     HostUnreachable {
-        from: Option<Ipv4Addr>,
+        from: Option<IpAddr>,
     },
 
     ProtocolUnreachable {
-        from: Option<Ipv4Addr>,
+        from: Option<IpAddr>,
     },
 
     PortUnreachable {
-        from: Option<Ipv4Addr>,
+        from: Option<IpAddr>,
     },
 
     FragmentationNeeded {
-        from: Option<Ipv4Addr>,
+        from: Option<IpAddr>,
+        mtu: Option<u32>,
+    },
+
+    PacketTooBig {
+        from: Option<IpAddr>,
         mtu: Option<u32>,
     },
 
     SourceRouteFailed {
-        from: Option<Ipv4Addr>,
+        from: Option<IpAddr>,
     },
 
     AdministrativelyProhibited {
-        from: Option<Ipv4Addr>,
+        from: Option<IpAddr>,
     },
 
     TimeExceeded {
-        from: Option<Ipv4Addr>,
+        from: Option<IpAddr>,
         rtt: Option<Duration>,
     },
 
     ParameterProblem {
-        from: Option<Ipv4Addr>,
+        from: Option<IpAddr>,
     },
 
     NetworkDown,
@@ -108,7 +113,7 @@ pub enum PingResult {
     PermissionDenied,
 
     IcmpError {
-        from: Option<Ipv4Addr>,
+        from: Option<IpAddr>,
         icmp_type: u8,
         icmp_code: u8,
     },

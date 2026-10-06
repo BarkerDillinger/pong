@@ -1,5 +1,5 @@
 use serde::Serialize;
-use std::net::Ipv4Addr;
+use std::net::IpAddr;
 use std::time::Duration;
 
 use crate::types::PingResult;
@@ -16,7 +16,10 @@ pub struct JsonPingProbe {
     pub ttl: Option<u8>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub from: Option<Ipv4Addr>,
+    pub hop_limit: Option<u8>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub from: Option<IpAddr>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
     pub mtu: Option<u32>,
@@ -36,7 +39,9 @@ pub struct JsonPingOutput {
     pub schema_version: u32,
     pub mode: &'static str,
     pub target: String,
-    pub address: Ipv4Addr,
+    pub address: IpAddr,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scope_id: Option<u32>,
     pub transmitted: u32,
     pub received: u32,
     pub probes: Vec<JsonPingProbe>,
@@ -52,6 +57,7 @@ pub enum JsonStatus {
     ProtocolUnreachable,
     PortUnreachable,
     FragmentationNeeded,
+    PacketTooBig,
     SourceRouteFailed,
     AdministrativelyProhibited,
     TimeExceeded,
@@ -73,6 +79,7 @@ pub fn ping_result_to_json(sequence: u16, result: &PingResult) -> JsonPingProbe 
             status: JsonStatus::Alive,
             rtt_ms: Some(duration_ms(*rtt)),
             ttl: *ttl,
+            hop_limit: None,
             from: None,
             mtu: None,
             icmp_type: None,
@@ -85,6 +92,7 @@ pub fn ping_result_to_json(sequence: u16, result: &PingResult) -> JsonPingProbe 
             status: JsonStatus::NoResponse,
             rtt_ms: None,
             ttl: None,
+            hop_limit: None,
             from: None,
             mtu: None,
             icmp_type: None,
@@ -125,6 +133,7 @@ pub fn ping_result_to_json(sequence: u16, result: &PingResult) -> JsonPingProbe 
             status: JsonStatus::TimeExceeded,
             rtt_ms: rtt.map(duration_ms),
             ttl: None,
+            hop_limit: None,
             from: *from,
             mtu: None,
             icmp_type: None,
@@ -137,12 +146,19 @@ pub fn ping_result_to_json(sequence: u16, result: &PingResult) -> JsonPingProbe 
             status: JsonStatus::FragmentationNeeded,
             rtt_ms: None,
             ttl: None,
+            hop_limit: None,
             from: *from,
             mtu: *mtu,
             icmp_type: None,
             icmp_code: None,
             error: None,
         },
+
+        PingResult::PacketTooBig { from, mtu } => {
+            let mut probe = json_error_probe(sequence, JsonStatus::PacketTooBig, *from);
+            probe.mtu = *mtu;
+            probe
+        }
 
         PingResult::NetworkDown => json_error_probe(sequence, JsonStatus::NetworkDown, None),
 
@@ -159,6 +175,7 @@ pub fn ping_result_to_json(sequence: u16, result: &PingResult) -> JsonPingProbe 
             status: JsonStatus::IcmpError,
             rtt_ms: None,
             ttl: None,
+            hop_limit: None,
             from: *from,
             mtu: None,
             icmp_type: Some(*icmp_type),
@@ -171,6 +188,7 @@ pub fn ping_result_to_json(sequence: u16, result: &PingResult) -> JsonPingProbe 
             status: JsonStatus::LocalError,
             rtt_ms: None,
             ttl: None,
+            hop_limit: None,
             from: None,
             mtu: None,
             icmp_type: None,
@@ -180,12 +198,13 @@ pub fn ping_result_to_json(sequence: u16, result: &PingResult) -> JsonPingProbe 
     }
 }
 
-fn json_error_probe(sequence: u16, status: JsonStatus, from: Option<Ipv4Addr>) -> JsonPingProbe {
+fn json_error_probe(sequence: u16, status: JsonStatus, from: Option<IpAddr>) -> JsonPingProbe {
     JsonPingProbe {
         sequence,
         status,
         rtt_ms: None,
         ttl: None,
+        hop_limit: None,
         from,
         mtu: None,
         icmp_type: None,

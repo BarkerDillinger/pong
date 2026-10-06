@@ -24,7 +24,8 @@ impl PingStats {
         }
     }
 
-    pub fn print(&self, target: &str) {
+    pub fn print_family(&self, target: &str, ipv6: bool) {
+        let limit_label = if ipv6 { "hop limit" } else { "ttl" };
         let elapsed_ms = self.started.elapsed().as_millis();
 
         let lost = self.transmitted.saturating_sub(self.received);
@@ -39,7 +40,7 @@ impl PingStats {
 
         println!(
             "{}",
-            style(format!("--- {target} ring statistics ---"))
+            style(format!("--- {target} pong statistics ---"))
                 .cyan()
                 .bold()
         );
@@ -69,7 +70,7 @@ impl PingStats {
 
             let avg = self.ttls.iter().map(|ttl| *ttl as f64).sum::<f64>() / self.ttls.len() as f64;
 
-            println!("ttl min/avg/max = {}/{:.1}/{}", min, avg, max);
+            println!("{limit_label} min/avg/max = {}/{:.1}/{}", min, avg, max);
 
             let representative_ttl = avg.round() as u8;
             let hops = estimate_hops(representative_ttl);

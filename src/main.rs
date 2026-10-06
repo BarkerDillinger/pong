@@ -13,7 +13,7 @@ use clap::Parser;
 use console::style;
 
 use std::io;
-use std::net::{Ipv4Addr, SocketAddr, ToSocketAddrs};
+use std::net::SocketAddr;
 use std::time::Duration;
 
 use crate::cli::Cli;
@@ -43,25 +43,6 @@ fn effective_interval(cli: &Cli) -> Duration {
     });
 
     Duration::from_millis(milliseconds)
-}
-
-fn resolve_target(target: &str) -> io::Result<Ipv4Addr> {
-    if let Ok(ip) = target.parse::<Ipv4Addr>() {
-        return Ok(ip);
-    }
-
-    let addresses = (target, 0).to_socket_addrs()?;
-
-    for address in addresses {
-        if let SocketAddr::V4(address_v4) = address {
-            return Ok(*address_v4.ip());
-        }
-    }
-
-    Err(io::Error::new(
-        io::ErrorKind::AddrNotAvailable,
-        format!("No IPv4 address found for {target}"),
-    ))
 }
 
 fn main() -> io::Result<()> {
@@ -159,16 +140,16 @@ fn main() -> io::Result<()> {
     };
 
     /*
-     * Resolve target to IPv4.
+     * Resolve target and preserve any IPv6 interface scope.
      */
 
-    let target = match resolve_target(target_name) {
+    let target = match dns::resolve_target(target_name, cli.ipv4, cli.ipv6) {
         Ok(ip) => ip,
 
         Err(error) => {
             eprintln!(
                 "{} {}: {}",
-                style("DNS Failure").red().bold(),
+                style("Target Error").red().bold(),
                 target_name,
                 error
             );
@@ -177,14 +158,22 @@ fn main() -> io::Result<()> {
         }
     };
 
-    let target_display = display_target(target_name, target);
+    let target_display = display_target(target_name, target.ip());
 
     /*
      * Route mode.
      */
 
     if cli.route {
-        return modes::route::run(&cli, target, &target_display, timeout);
+        return match target {
+            SocketAddr::V4(address) => {
+                modes::route::run(&cli, *address.ip(), &target_display, timeout)
+            }
+            SocketAddr::V6(_) => Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "IPv6 route tracing is not implemented yet",
+            )),
+        };
     }
 
     /*

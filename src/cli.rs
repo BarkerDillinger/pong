@@ -5,11 +5,19 @@ use crate::constants::{DEFAULT_PAYLOAD_SIZE, DEFAULT_SWEEP_CONCURRENCY};
 
 #[derive(Parser, Debug)]
 #[command(
-    name = "ring",
+    name = "pong",
     version,
     about = "Linux ICMP reachability, latency, route tracing, and network discovery utility"
 )]
 pub struct Cli {
+    /// Resolve only IPv4 addresses
+    #[arg(short = '4', long, conflicts_with = "ipv6")]
+    pub ipv4: bool,
+
+    /// Resolve only IPv6 addresses (ping mode)
+    #[arg(short = '6', long, conflicts_with_all = ["ipv4", "broadcast", "sweep", "route"])]
+    pub ipv6: bool,
+
     #[arg(short = 'c', long, value_name = "COUNT")]
     pub count: Option<u32>,
 

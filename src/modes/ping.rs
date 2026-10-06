@@ -1,5 +1,6 @@
 use std::io;
-use std::net::Ipv4Addr;
+use std::net::SocketAddr;
+use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
 use std::sync::{
     Arc,
     atomic::{AtomicBool, Ordering},
@@ -15,26 +16,33 @@ use crate::ipv4::socket::{create_ping_socket, send_echo_request, wait_for_reply}
 
 use crate::json::{JsonPingOutput, JsonPingProbe, ping_result_to_json};
 
-use crate::output::print_result;
+use crate::output::print_result_family;
 
 use crate::types::{PingResult, PingStats};
 
 pub fn run(
     cli: &Cli,
     target_name: &str,
-    target: Ipv4Addr,
+    target: SocketAddr,
     target_display: &str,
     timeout: Duration,
     interval: Duration,
 ) -> io::Result<()> {
-    let fd = match create_ping_socket(timeout) {
+    let socket = match target {
+        SocketAddr::V4(_) => {
+            create_ping_socket(timeout).map(|raw| unsafe { OwnedFd::from_raw_fd(raw) })
+        }
+        SocketAddr::V6(_) => crate::ipv6::socket::create_ping_socket(),
+    };
+    let fd = match socket {
         Ok(fd) => fd,
-
         Err(error) => {
-            eprintln!("ring: unable to create ICMP ping socket: {error}");
-
-            eprintln!("Check: sysctl net.ipv4.ping_group_range");
-
+            eprintln!("pong: unable to create ping socket: {error}");
+            if error.kind() == io::ErrorKind::PermissionDenied {
+                eprintln!(
+                    "Check: sysctl net.ipv4.ping_group_range (controls IPv4 and IPv6 ping sockets)"
+                );
+            }
             std::process::exit(3);
         }
     };
@@ -66,24 +74,44 @@ pub fn run(
 
         attempts += 1;
 
-        let packet = build_echo_request(sequence, cli.size);
+        let packet = match target {
+            SocketAddr::V4(_) => build_echo_request(sequence, cli.size),
+            SocketAddr::V6(_) => crate::ipv6::packet::build_echo_request(sequence, cli.size),
+        };
 
         let start = Instant::now();
 
-        let result = match send_echo_request(fd, target, &packet) {
+        let sent = match target {
+            SocketAddr::V4(address) => send_echo_request(fd.as_raw_fd(), *address.ip(), &packet),
+            SocketAddr::V6(address) => {
+                crate::ipv6::socket::send_echo_request(fd.as_raw_fd(), address, &packet)
+            }
+        };
+        let result = match sent {
             Ok(()) => {
                 stats.transmitted += 1;
-
-                wait_for_reply(fd, target, sequence, start)
+                match target {
+                    SocketAddr::V4(address) => {
+                        wait_for_reply(fd.as_raw_fd(), *address.ip(), sequence, start)
+                    }
+                    SocketAddr::V6(address) => crate::ipv6::socket::wait_for_reply(
+                        &fd, address, sequence, &packet, start, timeout,
+                    ),
+                }
             }
-
             Err(error) => classify_network_error(error),
         };
 
         if cli.json {
-            json_probes.push(ping_result_to_json(sequence, &result));
+            json_probes.push({
+                let mut probe = ping_result_to_json(sequence, &result);
+                if target.is_ipv6() {
+                    probe.hop_limit = probe.ttl.take();
+                }
+                probe
+            });
         } else {
-            print_result(target_display, sequence, &result, timeout);
+            print_result_family(target_display, sequence, &result, timeout, target.is_ipv6());
         }
 
         match &result {
@@ -111,16 +139,18 @@ pub fn run(
         thread::sleep(interval);
     }
 
-    unsafe {
-        libc::close(fd);
-    }
+    drop(fd);
 
     if cli.json {
         let output = JsonPingOutput {
             schema_version: 1,
             mode: "ping",
             target: target_name.to_string(),
-            address: target,
+            address: target.ip(),
+            scope_id: match target {
+                SocketAddr::V6(a) if a.scope_id() != 0 => Some(a.scope_id()),
+                _ => None,
+            },
             transmitted: stats.transmitted,
             received: stats.received,
             probes: json_probes,
@@ -131,7 +161,7 @@ pub fn run(
             serde_json::to_string_pretty(&output).expect("Unable to serialize JSON output")
         );
     } else if show_statistics {
-        stats.print(target_display);
+        stats.print_family(target_display, target.is_ipv6());
     }
 
     if stats.received == 0 {
