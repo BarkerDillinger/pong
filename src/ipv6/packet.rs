@@ -1,3 +1,4 @@
+// src/ipv6/packet.rs
 /// Linux ping sockets supply the identifier and ICMPv6 pseudo-header checksum.
 pub fn build_echo_request(sequence: u16, payload_size: usize) -> Vec<u8> {
     let mut packet = vec![0; 8 + payload_size];

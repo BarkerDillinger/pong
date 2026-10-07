@@ -1,3 +1,6 @@
+// src/main.rs
+// Application entry point: validate arguments, resolve targets,
+// and dispatch to the selected operating mode.
 mod cli;
 mod constants;
 mod dns;
@@ -47,6 +50,11 @@ fn effective_interval(cli: &Cli) -> Duration {
 
 fn main() -> io::Result<()> {
     let cli = Cli::parse();
+
+    // Neighbor enumeration uses the kernel cache, not destination DNS.
+    if cli.neighbors {
+        return modes::neighbors::run(&cli);
+    }
 
     /*
      * General CLI validation

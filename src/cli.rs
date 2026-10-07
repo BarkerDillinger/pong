@@ -1,3 +1,4 @@
+// src/cli.rs
 use clap::Parser;
 use std::net::Ipv4Addr;
 
@@ -10,11 +11,22 @@ use crate::constants::{DEFAULT_PAYLOAD_SIZE, DEFAULT_SWEEP_CONCURRENCY};
     about = "Linux ICMP reachability, latency, route tracing, and network discovery utility"
 )]
 pub struct Cli {
+    /// List cached IPv6 neighbors; TARGET optionally selects an interface
+    #[arg(long, requires = "ipv6", conflicts_with_all = [
+        "ipv4", "count", "continuous", "broadcast", "sweep", "route",
+        "size", "timeout", "interval"
+    ])]
+    pub neighbors: bool,
+
+    /// Show only remote unicast candidates from the neighbor cache
+    #[arg(long, requires = "neighbors")]
+    pub peers: bool,
+
     /// Resolve only IPv4 addresses
     #[arg(short = '4', long, conflicts_with = "ipv6")]
     pub ipv4: bool,
 
-    /// Resolve only IPv6 addresses (ping mode)
+    /// Use IPv6 for ping or neighbor enumeration
     #[arg(short = '6', long, conflicts_with_all = ["ipv4", "broadcast", "sweep", "route"])]
     pub ipv6: bool,
 
@@ -49,7 +61,7 @@ pub struct Cli {
     #[arg(short = 'i', long = "interval", value_name = "MILLISECONDS")]
     pub interval: Option<u64>,
 
-    /// Host/IP normally, or interface name when -b is used
+    /// Host/IP for ping/route, or interface name for -b/--neighbors
     #[arg(value_name = "TARGET")]
     pub target: Option<String>,
 

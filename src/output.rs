@@ -1,3 +1,4 @@
+// src/output.rs
 use console::style;
 use std::net::IpAddr;
 use std::time::Duration;

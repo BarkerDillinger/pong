@@ -1,3 +1,5 @@
+// src/ipv6/socket.rs
+// IPv6 socket utilities for sending and receiving ICMPv6 packets.
 use std::io;
 use std::mem;
 use std::net::{Ipv6Addr, SocketAddrV6};
