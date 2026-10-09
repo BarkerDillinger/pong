@@ -15,18 +15,6 @@ pub struct Cli {
     #[arg(short = '4', long, conflicts_with = "ipv6")]
     pub ipv4: bool,
 
-    /// Show the Linux IPv6 Neighbor Discovery cache (NDP), optionally filtered by interface
-    #[arg(long, requires = "ipv6", conflicts_with_all = ["gateway", "interfaces", "route", "broadcast", "sweep", "dns", "reverse"])]
-    pub neighbors: bool,
-
-    /// List IPv6 interface addresses (link-local, ULA, global) and default routes
-    #[arg(long, requires = "ipv6", conflicts_with_all = ["neighbors", "gateway", "route", "broadcast", "sweep", "dns", "reverse"])]
-    pub interfaces: bool,
-
-    /// Show the IPv4 default gateway; add -6 for IPv6. TARGET can filter by interface
-    #[arg(long, conflicts_with_all = ["neighbors", "interfaces", "route", "broadcast", "sweep", "dns", "reverse"])]
-    pub gateway: bool,
-
     /// Force IPv6 address resolution for ping and route
     #[arg(hide = true, short = '6', long, conflicts_with_all = ["ipv4", "broadcast", "sweep"])]
     pub ipv6: bool,
@@ -146,11 +134,4 @@ pub struct Cli {
     /// Output structured results as JSON
     #[arg(long)]
     pub json: bool,
-    /// Look up DNS A and AAAA addresses without sending ICMP packets
-    #[arg(long, conflicts_with_all = ["reverse", "broadcast", "sweep", "route", "continuous", "json"])]
-    pub dns: bool,
-
-    /// Reverse DNS (PTR) lookup for an IPv4 or IPv6 address
-    #[arg(long, conflicts_with_all = ["dns", "broadcast", "sweep", "route", "continuous", "json"])]
-    pub reverse: bool,
 }

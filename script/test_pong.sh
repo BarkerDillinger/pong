@@ -474,7 +474,7 @@ run_expected_failure \
 
 run_expected_failure \
     "IPv6 target is unsupported" \
-    "${PONG}" ::1
+    "${PONG}" -6 127.0.0.1
 
 # ------------------------------------------------------------
 # Clap conflict tests

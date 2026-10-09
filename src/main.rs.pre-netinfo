@@ -7,7 +7,6 @@ mod ipv4;
 mod ipv6;
 mod json;
 mod modes;
-mod netinfo;
 mod output;
 mod stats;
 mod types;
@@ -60,17 +59,6 @@ fn main() -> io::Result<()> {
         return Ok(());
     }
     let cli = Cli::parse();
-
-    // Read-only network diagnostics: no ICMP packets or raw sockets.
-    if cli.neighbors {
-        return netinfo::neighbors(cli.target.as_deref(), cli.json);
-    }
-    if cli.interfaces {
-        return netinfo::interfaces(cli.target.as_deref(), cli.json);
-    }
-    if cli.gateway {
-        return netinfo::gateways(cli.ipv6, cli.target.as_deref(), cli.json);
-    }
 
     /*
      * General CLI validation

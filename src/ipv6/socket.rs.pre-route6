@@ -139,10 +139,6 @@ pub fn wait_for_reply(
             && let Some((seq, result)) = read_error_queue(raw)
         {
             if seq == sequence {
-                let mut result = result;
-                if let PingResult::TimeExceeded { rtt, .. } = &mut result {
-                    *rtt = Some(start.elapsed());
-                }
                 return result;
             }
             continue;

@@ -1,13 +1,10 @@
 mod cli;
 mod constants;
 mod dns;
-mod dns_lookup;
-mod help6;
 mod ipv4;
 mod ipv6;
 mod json;
 mod modes;
-mod netinfo;
 mod output;
 mod stats;
 mod types;
@@ -49,28 +46,7 @@ fn effective_interval(cli: &Cli) -> Duration {
 }
 
 fn main() -> io::Result<()> {
-    // Handle the standalone IPv6 help page before clap parses arguments.
-    // A literal --help6 after `--` remains a positional target.
-    if std::env::args_os()
-        .skip(1)
-        .take_while(|arg| arg != "--")
-        .any(|arg| arg == "--help6")
-    {
-        print!("{}", help6::HELP);
-        return Ok(());
-    }
     let cli = Cli::parse();
-
-    // Read-only network diagnostics: no ICMP packets or raw sockets.
-    if cli.neighbors {
-        return netinfo::neighbors(cli.target.as_deref(), cli.json);
-    }
-    if cli.interfaces {
-        return netinfo::interfaces(cli.target.as_deref(), cli.json);
-    }
-    if cli.gateway {
-        return netinfo::gateways(cli.ipv6, cli.target.as_deref(), cli.json);
-    }
 
     /*
      * General CLI validation
@@ -167,13 +143,6 @@ fn main() -> io::Result<()> {
      * Resolve target and preserve any IPv6 interface scope.
      */
 
-    if cli.dns {
-        return dns_lookup::forward(target_name, cli.ipv4, cli.ipv6);
-    }
-    if cli.reverse {
-        return dns_lookup::reverse(target_name, cli.ipv4, cli.ipv6);
-    }
-
     let target = match dns::resolve_target(target_name, cli.ipv4, cli.ipv6) {
         Ok(ip) => ip,
 
@@ -200,7 +169,10 @@ fn main() -> io::Result<()> {
             SocketAddr::V4(address) => {
                 modes::route::run(&cli, *address.ip(), &target_display, timeout)
             }
-            SocketAddr::V6(address) => modes::route6::run(&cli, address, &target_display, timeout),
+            SocketAddr::V6(_) => Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "IPv6 route tracing is not implemented yet",
+            )),
         };
     }
 

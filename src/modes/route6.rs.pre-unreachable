@@ -1,0 +1,159 @@
+// IPv6 ICMP Echo traceroute. Linux ping sockets supply the identifier/checksum.
+use std::io;
+use std::net::{IpAddr, SocketAddrV6};
+use std::os::fd::AsRawFd;
+use std::time::{Duration, Instant};
+
+use crate::cli::Cli;
+use crate::dns::reverse_dns;
+use crate::ipv4::errors::classify_network_error;
+use crate::ipv6::packet::build_echo_request;
+use crate::ipv6::socket::{create_ping_socket, send_echo_request, wait_for_reply};
+use crate::stats::calculate_rtt_stats;
+use crate::types::PingResult;
+use console::style;
+
+fn set_hop_limit(fd: i32, hop: u8) -> io::Result<()> {
+    let limit: libc::c_int = hop.into();
+    let ok = unsafe {
+        libc::setsockopt(
+            fd,
+            libc::IPPROTO_IPV6,
+            libc::IPV6_UNICAST_HOPS,
+            (&limit as *const libc::c_int).cast(),
+            std::mem::size_of_val(&limit) as libc::socklen_t,
+        )
+    };
+    if ok < 0 {
+        Err(io::Error::last_os_error())
+    } else {
+        Ok(())
+    }
+}
+
+pub fn run(cli: &Cli, target: SocketAddrV6, display: &str, timeout: Duration) -> io::Result<()> {
+    let socket = create_ping_socket()?;
+    let fd = socket.as_raw_fd();
+    let probes = cli.count.unwrap_or(if cli.verbose { 3 } else { 1 });
+    println!(
+        "{}",
+        style(format!(
+            "Tracing IPv6 route to {display}, maximum {} hops",
+            cli.max_hops
+        ))
+        .cyan()
+        .bold()
+    );
+    if cli.verbose {
+        println!("{probes} probes per hop");
+        println!(
+            "{:<4} {:<52} {:>8} {:>9} {:>9} {:>9} {:>9} {:>9}",
+            "Hop", "Address", "Loss", "Min", "Avg", "Max", "mdev", "ΔAvg"
+        );
+    }
+    let mut sequence = 1u16;
+    let mut previous_avg: Option<f64> = None;
+    let mut sent = 0u64;
+    let mut received = 0u64;
+
+    for hop in 1..=cli.max_hops {
+        set_hop_limit(fd, hop)?;
+        let mut address: Option<IpAddr> = None;
+        let mut multiple = false;
+        let mut reached = false;
+        let mut rtts = Vec::new();
+        for _ in 0..probes {
+            let packet = build_echo_request(sequence, cli.size);
+            let started = Instant::now();
+            sent += 1;
+            let result = match send_echo_request(fd, target, &packet) {
+                Ok(()) => wait_for_reply(&socket, target, sequence, &packet, started, timeout),
+                Err(error) => classify_network_error(error),
+            };
+            match result {
+                PingResult::Alive { rtt, .. } => {
+                    let source = IpAddr::V6(*target.ip());
+                    if address.is_some_and(|old| old != source) {
+                        multiple = true;
+                    }
+                    address.get_or_insert(source);
+                    rtts.push(rtt);
+                    received += 1;
+                    reached = true;
+                }
+                PingResult::TimeExceeded { from, rtt } => {
+                    if let Some(source) = from {
+                        if address.is_some_and(|old| old != source) {
+                            multiple = true;
+                        }
+                        address.get_or_insert(source);
+                    }
+                    if let Some(rtt) = rtt {
+                        rtts.push(rtt);
+                        received += 1;
+                    }
+                }
+                PingResult::NetworkUnreachable { from }
+                | PingResult::HostUnreachable { from }
+                | PingResult::AdministrativelyProhibited { from } => {
+                    if let Some(source) = from {
+                        address.get_or_insert(source);
+                    }
+                }
+                _ => {}
+            }
+            sequence = sequence.wrapping_add(1);
+        }
+        let address_text = match address {
+            Some(ip) => match if cli.resolve { reverse_dns(ip) } else { None } {
+                Some(host) => format!("{host} ({ip})"),
+                None => ip.to_string(),
+            },
+            None => "*".to_owned(),
+        };
+        let name = format!("{address_text}{}", if multiple { " +" } else { "" });
+        let stats = calculate_rtt_stats(&rtts);
+        if cli.verbose {
+            let loss = 100.0 * (probes as usize - rtts.len()) as f64 / probes as f64;
+            if let Some(stats) = stats {
+                let delta = previous_avg
+                    .map(|old| format!("{:+.1}", stats.avg - old))
+                    .unwrap_or_else(|| "-".into());
+                previous_avg = Some(stats.avg);
+                println!(
+                    "{hop:<4} {name:<52} {loss:>7.1}% {:>9.1} {:>9.1} {:>9.1} {:>9.1} {:>9}",
+                    stats.min, stats.avg, stats.max, stats.mdev, delta
+                );
+            } else {
+                println!(
+                    "{hop:<4} {name:<52} {loss:>7.1}% {:>9} {:>9} {:>9} {:>9} {:>9}",
+                    "-", "-", "-", "-", "-"
+                );
+            }
+        } else if let Some(stats) = stats {
+            println!("{hop:>2}  {name}  {:.3} ms", stats.avg);
+        } else {
+            println!("{hop:>2}  {name}");
+        }
+        if reached {
+            println!("\n{}", style(format!("Route = {hop} hops")).green().bold());
+            if cli.verbose {
+                println!("{sent} probes transmitted, {received} responses");
+            }
+            return Ok(());
+        }
+    }
+    println!(
+        "\n{}",
+        style(format!(
+            "Destination not reached within {} hops",
+            cli.max_hops
+        ))
+        .yellow()
+        .bold()
+    );
+    if cli.verbose {
+        println!("{sent} probes transmitted, {received} responses");
+    }
+    Ok(())
+}
