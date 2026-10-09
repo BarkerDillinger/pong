@@ -1,3 +1,4 @@
+// src/dns.rs
 use std::ffi::{CStr, CString};
 use std::io;
 use std::mem;

@@ -1,3 +1,5 @@
+// src/ipv4/interface.rs
+// IPv4 interface and sweep range utilities.
 use std::io;
 use std::net::Ipv4Addr;
 

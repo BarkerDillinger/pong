@@ -1,3 +1,4 @@
+// src/json.rs
 use serde::Serialize;
 use std::net::IpAddr;
 use std::time::Duration;

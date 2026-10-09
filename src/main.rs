@@ -1,3 +1,6 @@
+// src/main.rs
+// Application entry point: validate arguments, resolve targets,
+// and dispatch to the selected operating mode.
 mod cli;
 mod constants;
 mod dns;
@@ -61,13 +64,21 @@ fn main() -> io::Result<()> {
     }
     let cli = Cli::parse();
 
-    // Read-only network diagnostics: no ICMP packets or raw sockets.
+    // IPv6 neighbor cache and peer inspection.
     if cli.neighbors {
+        if cli.peers {
+            return modes::neighbors::run(&cli);
+        }
+
         return netinfo::neighbors(cli.target.as_deref(), cli.json);
     }
+
+    // IPv6 interface diagnostics.
     if cli.interfaces {
         return netinfo::interfaces(cli.target.as_deref(), cli.json);
     }
+
+    // IPv4 and IPv6 gateway diagnostics.
     if cli.gateway {
         return netinfo::gateways(cli.ipv6, cli.target.as_deref(), cli.json);
     }

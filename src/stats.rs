@@ -1,3 +1,4 @@
+// src/stats.rs
 use console::style;
 use std::time::Duration;
 

@@ -1,7 +1,12 @@
 /target
 
-# Local PONG test network configuration
-scripts/test.txt
+# Local installer backups
+*.pre-*
+
+# Private test configuration
+/script/test.txt
+
+# Local test results
 Test*.txt
 
 # Editor / IDE

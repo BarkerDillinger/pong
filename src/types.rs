@@ -1,3 +1,4 @@
+// src/types.rs
 use std::net::{IpAddr, Ipv4Addr};
 use std::time::{Duration, Instant};
 

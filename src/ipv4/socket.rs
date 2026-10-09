@@ -1,3 +1,5 @@
+// src/ipv4/socket.rs
+// IPv4 socket utilities for sending and receiving ICMP packets.
 use std::io;
 use std::mem;
 use std::net::Ipv4Addr;

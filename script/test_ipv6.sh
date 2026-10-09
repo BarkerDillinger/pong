@@ -32,7 +32,7 @@ expect_invalid -4 -6 ::1
 expect_invalid -6 fe80::1
 expect_invalid -6 fe80::1%pong_missing_iface
 expect_invalid -6 ff02::1%lo
-expect_invalid -6 --route ::1
+"$app" -6 --route ::1
 expect_invalid -6 -S
 expect_invalid -6 -b
 expect_invalid -6 ::1 -c 0

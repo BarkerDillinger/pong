@@ -1,3 +1,4 @@
+// src/cli.rs
 use clap::Parser;
 use std::net::Ipv4Addr;
 
@@ -11,24 +12,38 @@ use crate::constants::{DEFAULT_PAYLOAD_SIZE, DEFAULT_SWEEP_CONCURRENCY};
     about = "Linux ICMP reachability, latency, route tracing, and network discovery utility"
 )]
 pub struct Cli {
+    /// Show only remote unicast candidates from the neighbor cache
+    #[arg(long, requires = "neighbors")]
+    pub peers: bool,
+
     /// Resolve only IPv4 addresses
     #[arg(short = '4', long, conflicts_with = "ipv6")]
     pub ipv4: bool,
 
-    /// Show the Linux IPv6 Neighbor Discovery cache (NDP), optionally filtered by interface
-    #[arg(long, requires = "ipv6", conflicts_with_all = ["gateway", "interfaces", "route", "broadcast", "sweep", "dns", "reverse"])]
+    /// Show cached IPv6 neighbors
+    #[arg(long, requires = "ipv6", conflicts_with_all = [
+        "interfaces", "gateway", "route", "broadcast",
+        "sweep", "dns", "reverse"
+    ])]
     pub neighbors: bool,
 
-    /// List IPv6 interface addresses (link-local, ULA, global) and default routes
-    #[arg(long, requires = "ipv6", conflicts_with_all = ["neighbors", "gateway", "route", "broadcast", "sweep", "dns", "reverse"])]
+    /// Display IPv6 interface addresses and default routes
+    #[arg(long, requires = "ipv6", conflicts_with_all = [
+        "neighbors", "gateway", "route", "broadcast",
+        "sweep", "dns", "reverse"
+    ])]
     pub interfaces: bool,
 
-    /// Show the IPv4 default gateway; add -6 for IPv6. TARGET can filter by interface
-    #[arg(long, conflicts_with_all = ["neighbors", "interfaces", "route", "broadcast", "sweep", "dns", "reverse"])]
+    /// Display IPv4 or IPv6 default gateways
+    #[arg(long, conflicts_with_all = [
+        "neighbors", "interfaces", "route",
+        "broadcast", "sweep", "dns", "reverse"
+    ])]
     pub gateway: bool,
 
-    /// Force IPv6 address resolution for ping and route
-    #[arg(hide = true, short = '6', long, conflicts_with_all = ["ipv4", "broadcast", "sweep"])]
+    /// Select IPv6 for ping, traceroute, and diagnostics
+    #[arg(hide = true, short = '6', long,
+          conflicts_with_all = ["ipv4", "broadcast", "sweep"])]
     pub ipv6: bool,
 
     #[arg(short = 'c', long, value_name = "COUNT")]
@@ -62,7 +77,7 @@ pub struct Cli {
     #[arg(short = 'i', long = "interval", value_name = "MILLISECONDS")]
     pub interval: Option<u64>,
 
-    /// Host/IP normally, or interface name when -b is used
+    /// Host/IP for ping/route, or interface name for -b/--neighbors
     #[arg(value_name = "TARGET")]
     pub target: Option<String>,
 
