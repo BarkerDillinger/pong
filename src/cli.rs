@@ -34,6 +34,26 @@ pub struct Cli {
     ])]
     pub interfaces: bool,
 
+    /// Show the cached IPv4 ARP/neighbor table (TARGET may select an interface)
+    #[arg(long, conflicts_with_all = [
+        "ipv6", "neighbors", "interfaces", "gateway", "route",
+        "broadcast", "sweep", "dns", "reverse", "peers",
+        "count", "continuous", "resolve", "verbose"
+    ])]
+    pub arp: bool,
+
+    /// Show age and location of local IEEE OUI data
+    #[arg(long, conflicts_with_all = ["oui_update", "arp", "neighbors", "interfaces", "gateway", "route", "broadcast", "sweep", "dns", "reverse"])]
+    pub oui_check: bool,
+
+    /// Refresh IEEE OUI data if missing or at least 90 days old
+    #[arg(long, conflicts_with_all = ["oui_check", "arp", "neighbors", "interfaces", "gateway", "route", "broadcast", "sweep", "dns", "reverse"])]
+    pub oui_update: bool,
+
+    /// Force an OUI database refresh regardless of age
+    #[arg(long, requires = "oui_update")]
+    pub oui_force: bool,
+
     /// Display IPv4 or IPv6 default gateways
     #[arg(long, conflicts_with_all = [
         "neighbors", "interfaces", "route",

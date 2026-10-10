@@ -19,3 +19,6 @@ Test*.txt
 # OS files
 .DS_Store
 Thumbs.db
+
+# Local addon source backups
+/.pong-backups/
