@@ -1,12 +1,7 @@
 # pong
-I found out the name ring has been used for an application. I am officially renaming ring to pong. The name change will take a little while to implement and completely remove the name ring from the project and rename it to pong.
-
-Formerly known as ring
-ring is a lightweight IPv4 ICMP network diagnostic utility written in Rust.
-
 The project began as an exercise in understanding how ping works at the packet and socket level and has grown into a small network diagnostic tool supporting ICMP reachability testing, latency measurement, route tracing, Linux extended ICMP error reporting, and structured JSON output.
 
-Unlike a wrapper around the system ping command, ring constructs ICMP Echo Request packets and communicates directly with Linux ICMP sockets.
+Unlike a wrapper around the system ping command, pong constructs ICMP Echo Request packets and communicates directly with Linux ICMP sockets.
 
 Current release: v0.1.0 Platform: Linux Protocol: IPv4 / ICMPv4 IPv6: Not yet supported
 
@@ -14,20 +9,20 @@ Features
 ICMP Reachability
 Test whether a host responds to an ICMP Echo Request:
 
-ring 192.168.1.1
+pong 192.168.1.1
 Example:
 
 192.168.1.1 ALIVE seq=1 ttl=64 hops≈0 time=0.842 ms
 Hostnames are resolved automatically:
 
-ring google.com
+pong google.com
 Example:
 
 google.com (142.250.141.102) ALIVE seq=1 ttl=251 hops≈4 time=42.839 ms
 Multiple Probes
 Send a specific number of requests with -c or --count:
 
-ring -c 5 192.168.1.1
+pong -c 5 192.168.1.1
 Statistics include:
 
 Packets transmitted
@@ -42,7 +37,7 @@ Minimum, average, and maximum received TTL
 Continuous Mode
 Use -z or --continuous to continue probing until interrupted:
 
-ring -z 192.168.1.1
+pong -z 192.168.1.1
 Press Ctrl+C to stop the test and display statistics.
 
 --continuous and --count are mutually exclusive.
@@ -50,7 +45,7 @@ Press Ctrl+C to stop the test and display statistics.
 Payload Size
 Change the ICMP payload size with:
 
-ring -s 128 192.168.1.1
+pong -s 128 192.168.1.1
 The default payload is:
 
 56 bytes
@@ -60,21 +55,21 @@ The current maximum is:
 Timeout
 Set the response timeout in milliseconds:
 
-ring -t 500 192.168.1.1
+pong -t 500 192.168.1.1
 The default timeout is:
 
 2000 ms
 Probe Interval
 Set the delay between probes:
 
-ring -i 250 -c 10 192.168.1.1
+pong -i 250 -c 10 192.168.1.1
 The default interval is:
 
 1000 ms
 Route Tracing
-ring can trace the IPv4 route toward a destination by manipulating the outgoing IP TTL and observing ICMP Time Exceeded responses.
+pong can trace the IPv4 route toward a destination by manipulating the outgoing IP TTL and observing ICMP Time Exceeded responses.
 
-ring --route 1.1.1.1
+pong --route 1.1.1.1
 Example output:
 
 Tracing route to 1.1.1.1, maximum 30 hops
@@ -94,11 +89,11 @@ The default maximum route depth is 30 hops.
 
 It can be changed with:
 
-ring --route --max-hops 64 1.1.1.1
+pong --route --max-hops 64 1.1.1.1
 Verbose Route Mode
 Use -v or --verbose for additional route statistics:
 
-ring --route -v 1.1.1.1
+pong --route -v 1.1.1.1
 Verbose route mode defaults to three probes per hop and reports:
 
 Hop Address                         RespLoss       Min       Avg       Max      mdev      ΔAvg
@@ -108,15 +103,15 @@ RespLoss represents probes at that TTL for which no response was received.
 
 The probe count can be overridden:
 
-ring --route -v -c 5 1.1.1.1
+pong --route -v -c 5 1.1.1.1
 Reverse DNS
 Resolve responding router addresses to hostnames:
 
-ring --route --resolve 1.1.1.1
+pong --route --resolve 1.1.1.1
 Reverse DNS lookups can make route tracing slower because each responding address may require a DNS lookup.
 
 ICMP Error Reporting
-On Linux, ring enables the extended socket error queue using IP_RECVERR.
+On Linux, pong enables the extended socket error queue using IP_RECVERR.
 
 This allows the program to distinguish several network conditions instead of reporting every unsuccessful request simply as a timeout.
 
@@ -142,7 +137,7 @@ A timeout still does not prove that a host is offline. Firewalls and operating s
 JSON Output
 Normal ping results can be emitted as structured JSON for scripts and other applications:
 
-ring -c 3 google.com --json
+pong -c 3 google.com --json
 Example:
 
 {
@@ -175,25 +170,25 @@ Example:
 }
 This can be combined with tools such as jq:
 
-ring google.com --json | jq -r '.probes[0].status'
+pong google.com --json | jq -r '.probes[0].status'
 or:
 
-ring -c 3 google.com --json | jq -r '.probes[].rtt_ms'
+pong -c 3 google.com --json | jq -r '.probes[].rtt_ms'
 The JSON format contains a schema_version field so the structured interface can evolve while remaining identifiable to scripts.
 
 In v0.1.0, JSON output is intended for normal ping mode. Route, broadcast, and sweep JSON output are not yet implemented.
 
 TTL and Estimated Return Hops
-For successful Echo Replies, ring displays the received IPv4 TTL:
+For successful Echo Replies, pong displays the received IPv4 TTL:
 
 1.1.1.1 ALIVE seq=1 ttl=59 hops≈5 time=56.182 ms
 hops≈5 is an estimate, not a measured route length.
 
-ring assumes a likely initial TTL of 64, 128, or 255 and calculates the approximate number of TTL decrements observed on the return path.
+pong assumes a likely initial TTL of 64, 128, or 255 and calculates the approximate number of TTL decrements observed on the return path.
 
 Actual route tracing with:
 
-ring --route TARGET
+pong --route TARGET
 measures the forward route separately.
 
 Forward and return paths on IP networks are not necessarily identical.
@@ -201,34 +196,34 @@ Forward and return paths on IP networks are not necessarily identical.
 Broadcast Interface Discovery
 The -b / --broadcast option currently identifies usable local IPv4 broadcast interfaces:
 
-ring -b
+pong -b
 A particular interface can be selected with:
 
-ring -b eth0
+pong -b eth0
 The current v0.1.0 implementation enumerates the interface address and calculated broadcast address.
 
 Actual broadcast ICMP discovery is planned for a future release.
 
 IPv4 Sweep Framework
-ring contains the initial network-selection and safety framework for IPv4 host sweeping.
+pong contains the initial network-selection and safety framework for IPv4 host sweeping.
 
 Examples of supported range definitions include:
 
-ring -S
+pong -S
 Derive ranges from usable local IPv4 interfaces.
 
-ring -S eth0
+pong -S eth0
 Use a specific local interface.
 
 An explicit inclusive range can be specified:
 
-ring -S --low 192.168.1.20 --high 192.168.1.80
+pong -S --low 192.168.1.20 --high 192.168.1.80
 A network and subnet mask can also be supplied:
 
-ring -S --network 192.168.1.0 --mask 255.255.255.0
+pong -S --network 192.168.1.0 --mask 255.255.255.0
 CIDR notation is supported:
 
-ring -S --network 192.168.1.0/24
+pong -S --network 192.168.1.0/24
 Sweep Safety
 The sweep framework applies safeguards to prevent accidental probing of unexpectedly large or public address ranges.
 
@@ -252,30 +247,30 @@ v0.1.0 note: The sweep engine itself is not yet implemented. The current impleme
 
 Installation
 Build from Source
-ring requires Rust and Cargo.
+pong requires Rust and Cargo.
 
 Clone the repository:
 
 git clone <repository-url>
-cd ring
+cd pong
 Build a release binary:
 
 cargo build --release
 The resulting executable will be:
 
-target/release/ring
+target/release/pong
 Install it for the current user:
 
 mkdir -p ~/.local/bin
-install -m 755 target/release/ring ~/.local/bin/ring
+install -m 755 target/release/pong ~/.local/bin/pong
 Make sure ~/.local/bin is in your PATH.
 
 Verify:
 
-ring --version
-ring --help
+pong --version
+pong --help
 Linux ICMP Ping Sockets
-ring currently uses:
+pong currently uses:
 
 AF_INET
 SOCK_DGRAM
@@ -288,7 +283,7 @@ sysctl net.ipv4.ping_group_range
 Check the current configuration with:
 
 sysctl net.ipv4.ping_group_range
-Therefore, under a normally configured Linux system, ring should not require root or CAP_NET_RAW for its normal IPv4 ping functionality.
+Therefore, under a normally configured Linux system, pong should not require root or CAP_NET_RAW for its normal IPv4 ping functionality.
 
 Current Limitations
 Version 0.1.0 is intentionally an early IPv4/Linux implementation.
@@ -321,9 +316,9 @@ Fixed per-probe deadlines using event-driven socket polling
 Source address/interface selection
 IPv6 -6 and IPv4 -4 selection
 Additional machine-readable network diagnostics
-The longer-term goal is to keep ring useful as a small command-line networking utility while also keeping the low-level networking implementation understandable.
+The longer-term goal is to keep pong useful as a small command-line networking utility while also keeping the low-level networking implementation understandable.
 
-Why ring?
+Why pong?
 This project is also intended as a practical exploration of networking and systems programming in Rust.
 
 Rather than hiding ICMP behind a high-level packet library, the implementation works directly with operating-system networking interfaces and manually handles several pieces of the protocol.
@@ -357,4 +352,4 @@ Permission is hereby granted, free of charge, to any person obtaining a copy of 
 
 The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFpongEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
