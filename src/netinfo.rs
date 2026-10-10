@@ -56,6 +56,115 @@ fn classify_v6(ip: &str) -> &'static str {
     }
 }
 
+/// Display the kernel IPv4 neighbor cache (ARP); does not probe the network.
+pub fn arp(iface: Option<&str>, json: bool) -> io::Result<()> {
+    let iface = interface_name(iface)?;
+    let mut args = vec!["-j", "-4", "neigh", "show"];
+    if let Some(name) = iface {
+        args.extend_from_slice(&["dev", name]);
+    }
+    let entries = invoke(&args)?;
+    // A populated link-layer address is useful even when the entry is STALE.
+    // FAILED/INCOMPLETE/NOARP entries are not evidence of an identified host.
+    let entries: Vec<Value> = entries
+        .into_iter()
+        .filter(|entry| {
+            entry
+                .get("lladdr")
+                .and_then(Value::as_str)
+                .is_some_and(|mac| crate::oui::parse_mac(mac).is_some())
+                && !matches!(
+                    entry.get("state"),
+                    Some(Value::String(s)) if s == "FAILED" || s == "INCOMPLETE" || s == "NOARP"
+                )
+                && !entry
+                    .get("state")
+                    .and_then(Value::as_array)
+                    .is_some_and(|states| {
+                        states
+                            .iter()
+                            .any(|s| matches!(s.as_str(), Some("FAILED" | "INCOMPLETE" | "NOARP")))
+                    })
+        })
+        .collect();
+
+    crate::oui_update::reminder_for_arp(json);
+    let vendors = crate::oui::VendorDb::load();
+    if json {
+        let enriched: Vec<Value> = entries
+            .into_iter()
+            .map(|mut entry| {
+                if let Some(mac) = entry.get("lladdr").and_then(Value::as_str) {
+                    let vendor = vendors.lookup(mac);
+                    if let Some(object) = entry.as_object_mut() {
+                        object.insert("vendor".into(), Value::String(vendor));
+                    }
+                }
+                entry
+            })
+            .collect();
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&enriched).map_err(io::Error::other)?
+        );
+        return Ok(());
+    }
+    use console::style;
+    println!(
+        "{}",
+        style(format!(
+            "IPv4 ARP cache{}",
+            iface.map_or(String::new(), |name| format!(" — {name}"))
+        ))
+        .cyan()
+        .bold()
+    );
+    println!(
+        "{:<16} {:<20} {:<14} {:<12} MANUFACTURER",
+        "IPv4 ADDRESS", "MAC ADDRESS", "INTERFACE", "STATE"
+    );
+    for entry in &entries {
+        let state = match entry.get("state") {
+            Some(Value::Array(states)) => states
+                .iter()
+                .filter_map(Value::as_str)
+                .collect::<Vec<_>>()
+                .join(","),
+            Some(Value::String(s)) => s.clone(),
+            _ => "UNKNOWN".into(),
+        };
+        let mac = str_field(entry, "lladdr");
+        // Pad the fields before coloring so ANSI escape codes do not shift columns.
+        let ip = format!("{:<16}", str_field(entry, "dst"));
+        let state_text = format!("{:<12}", state);
+        let (ip_colored, state_colored) = match state.as_str() {
+            "REACHABLE" => (style(ip).green().bold(), style(state_text).green().bold()),
+            "STALE" => (style(ip).yellow(), style(state_text).yellow()),
+            "DELAY" => (style(ip).cyan(), style(state_text).cyan()),
+            "PROBE" => (style(ip).magenta(), style(state_text).magenta()),
+            _ => (style(ip).white(), style(state_text).white()),
+        };
+        let dev = match str_field(entry, "dev") {
+            "-" => iface.unwrap_or("-"),
+            name => name,
+        };
+        println!(
+            "{} {:<20} {:<14} {} {}",
+            ip_colored,
+            mac,
+            dev,
+            state_colored,
+            vendors.lookup(mac)
+        );
+    }
+    println!(
+        "{} cached MAC entr{}; no ARP packets transmitted",
+        entries.len(),
+        if entries.len() == 1 { "y" } else { "ies" }
+    );
+    Ok(())
+}
+
 pub fn neighbors(iface: Option<&str>, json: bool) -> io::Result<()> {
     let iface = interface_name(iface)?;
     let mut args = vec!["-j", "-6", "neigh", "show"];

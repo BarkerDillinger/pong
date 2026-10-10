@@ -11,6 +11,8 @@ mod ipv6;
 mod json;
 mod modes;
 mod netinfo;
+mod oui;
+mod oui_update;
 mod output;
 mod stats;
 mod types;
@@ -63,6 +65,18 @@ fn main() -> io::Result<()> {
         return Ok(());
     }
     let cli = Cli::parse();
+
+    if cli.oui_check {
+        return oui_update::check();
+    }
+    if cli.oui_update {
+        return oui_update::update(cli.oui_force, false);
+    }
+
+    // Read-only IPv4 ARP inspection: no raw sockets or transmitted packets.
+    if cli.arp {
+        return netinfo::arp(cli.target.as_deref(), cli.json);
+    }
 
     // IPv6 neighbor cache and peer inspection.
     if cli.neighbors {
