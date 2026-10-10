@@ -3,353 +3,380 @@ The project began as an exercise in understanding how ping works at the packet a
 
 Unlike a wrapper around the system ping command, pong constructs ICMP Echo Request packets and communicates directly with Linux ICMP sockets.
 
-Current release: v0.1.0 Platform: Linux Protocol: IPv4 / ICMPv4 IPv6: Not yet supported
+# pong
 
-Features
-ICMP Reachability
-Test whether a host responds to an ICMP Echo Request:
+**pong** is a fast, lightweight Linux network diagnostics and discovery tool written in Rust. It brings IPv4 and IPv6 ICMP echo testing, traceroute, DNS lookup, network sweeps, gateway and interface inspection, and ARP/IPv6 neighbor-cache inspection into one command-line utility.
 
+Unlike a wrapper around the system `ping`, pong builds ICMP Echo Requests and uses Linux ICMP datagram sockets. Its networking diagnostics are designed to operate as an **ordinary user**, without raw sockets, `sudo`, or `CAP_NET_RAW`, on systems that permit unprivileged ICMP ping sockets.
+
+**Platform:** Linux · **Language:** Rust (edition 2024) · **License:** MIT
+
+> **Release note:** This README documents the features developed for the **v1.0.0 release**. Before tagging the release, update `version` in `Cargo.toml` from `0.1.0` to `1.0.0` and rebuild so `pong --version` reports the intended version.
+
+## Features at a glance
+
+| Area | Functionality |
+| --- | --- |
+| IPv4 | Ping, IPv4 traceroute, interface/broadcast inspection, concurrent IPv4 host sweeping, default-gateway detection |
+| IPv6 | Ping, IPv6 traceroute, link-local scope support, address/interface inspection, default-router detection |
+| Neighbor discovery | Read-only IPv4 ARP cache and IPv6 Neighbor Discovery (NDP) cache; IPv6 peer candidates |
+| Device identification | Offline manufacturer lookup using the IEEE MA-L OUI registry |
+| DNS | Forward A and AAAA lookups; reverse PTR lookups; optional reverse resolution of route hops |
+| Output | Color-coded diagnostic output, latency/loss statistics, and JSON for supported modes |
+| OUI maintenance | Local CSV, 90-day age reminder, explicit check/update commands |
+
+## Quick start
+
+```bash
+# IPv4 and IPv6 reachability
 pong 192.168.1.1
-Example:
+pong -6 ::1
+pong -c 5 example.com
 
-192.168.1.1 ALIVE seq=1 ttl=64 hops≈0 time=0.842 ms
-Hostnames are resolved automatically:
-
-pong google.com
-Example:
-
-google.com (142.250.141.102) ALIVE seq=1 ttl=251 hops≈4 time=42.839 ms
-Multiple Probes
-Send a specific number of requests with -c or --count:
-
-pong -c 5 192.168.1.1
-Statistics include:
-
-Packets transmitted
-Packets received
-Packet loss
-Elapsed time
-Minimum RTT
-Average RTT
-Maximum RTT
-Mean deviation
-Minimum, average, and maximum received TTL
-Continuous Mode
-Use -z or --continuous to continue probing until interrupted:
-
-pong -z 192.168.1.1
-Press Ctrl+C to stop the test and display statistics.
-
---continuous and --count are mutually exclusive.
-
-Payload Size
-Change the ICMP payload size with:
-
-pong -s 128 192.168.1.1
-The default payload is:
-
-56 bytes
-The current maximum is:
-
-65507 bytes
-Timeout
-Set the response timeout in milliseconds:
-
-pong -t 500 192.168.1.1
-The default timeout is:
-
-2000 ms
-Probe Interval
-Set the delay between probes:
-
-pong -i 250 -c 10 192.168.1.1
-The default interval is:
-
-1000 ms
-Route Tracing
-pong can trace the IPv4 route toward a destination by manipulating the outgoing IP TTL and observing ICMP Time Exceeded responses.
-
+# Routes
 pong --route 1.1.1.1
-Example output:
+pong -6 --route 2606:4700:4700::1111
 
-Tracing route to 1.1.1.1, maximum 30 hops
+# Discover responding IPv4 hosts
+pong -S eth0
 
- 1  192.168.1.1                                   0.842 ms
- 2  10.10.0.1                                     4.317 ms
- 3  * 
- 4  203.0.113.1                                  15.428 ms
- ...
- 8  1.1.1.1                                      21.752 ms
+# Inspect IP-to-MAC mappings
+pong --arp eth0
+pong -6 --neighbors eth0
+pong -6 --neighbors --peers eth0
 
-Route = 8 hops
-A * indicates that no usable response was received for that TTL.
+# Interfaces and gateways
+pong --gateway
+pong -6 --gateway
+pong -6 --interfaces eth0
 
-Maximum Hops
-The default maximum route depth is 30 hops.
+# DNS
+pong --dns example.com
+pong -6 --dns example.com
+pong --reverse 1.1.1.1
 
-It can be changed with:
+# Help
+pong --help
+pong --help6
+```
 
-pong --route --max-hops 64 1.1.1.1
-Verbose Route Mode
-Use -v or --verbose for additional route statistics:
+Replace `eth0` with the name of your own network interface (for example, `enp1s0` or `ens18`).
 
-pong --route -v 1.1.1.1
-Verbose route mode defaults to three probes per hop and reports:
+## IPv4 diagnostics
 
-Hop Address                         RespLoss       Min       Avg       Max      mdev      ΔAvg
-RespLoss represents probes at that TTL for which no response was received.
+### Ping and latency measurements
 
-ΔAvg is the difference between the average observed RTT of the current responding hop and the previous responding hop. It should not be interpreted as a direct measurement of latency between those two routers.
+Ping a host by IPv4 address or hostname:
 
-The probe count can be overridden:
+```bash
+pong 192.168.1.1
+pong -4 example.com
+pong -c 5 192.168.1.1
+```
 
-pong --route -v -c 5 1.1.1.1
-Reverse DNS
-Resolve responding router addresses to hostnames:
+A successful probe reports the sequence number, round-trip time (RTT), received TTL, and an estimated return-path hop count. Multiple probes provide packet transmission/reception counts, packet loss, elapsed time, and RTT minimum/average/maximum/deviation statistics. The hop estimate is calculated from the reply's TTL; it is **not** a measured forward-route length.
 
-pong --route --resolve 1.1.1.1
-Reverse DNS lookups can make route tracing slower because each responding address may require a DNS lookup.
+Useful options:
 
-ICMP Error Reporting
-On Linux, pong enables the extended socket error queue using IP_RECVERR.
+| Option | Purpose |
+| --- | --- |
+| `-4`, `--ipv4` | Select IPv4 for hostname resolution |
+| `-c N`, `--count N` | Send N echo probes |
+| `-z`, `--continuous` | Keep probing until Ctrl+C (cannot be combined with `-c`) |
+| `-s BYTES`, `--size BYTES` | Set ICMP payload size (default: 56 bytes) |
+| `-t MS`, `--timeout MS` | Set per-probe timeout (default: 2000 ms) |
+| `-i MS`, `--interval MS` | Set probe interval (default: 1000 ms) |
+| `--json` | Structured results for ping mode |
 
-This allows the program to distinguish several network conditions instead of reporting every unsuccessful request simply as a timeout.
-
-Recognized conditions include:
-
-Network unreachable
-Host unreachable
-Protocol unreachable
-Port unreachable
-Fragmentation needed
-Source route failed
-Administratively prohibited
-TTL exceeded
-Parameter problem
-Network down
-Permission denied
-Other ICMP errors
-Local socket errors
-Extended ICMP errors are correlated with the sequence number of the request that generated them.
-
-A timeout still does not prove that a host is offline. Firewalls and operating systems commonly discard ICMP Echo Requests without returning an error.
-
-JSON Output
-Normal ping results can be emitted as structured JSON for scripts and other applications:
-
-pong -c 3 google.com --json
 Example:
 
-{
-  "schema_version": 1,
-  "mode": "ping",
-  "target": "google.com",
-  "address": "142.250.141.102",
-  "transmitted": 3,
-  "received": 3,
-  "probes": [
-    {
-      "sequence": 1,
-      "status": "alive",
-      "rtt_ms": 42.839,
-      "ttl": 251
-    },
-    {
-      "sequence": 2,
-      "status": "alive",
-      "rtt_ms": 41.571,
-      "ttl": 251
-    },
-    {
-      "sequence": 3,
-      "status": "alive",
-      "rtt_ms": 43.217,
-      "ttl": 251
-    }
-  ]
-}
-This can be combined with tools such as jq:
+```bash
+pong -c 10 -s 128 -t 1500 -i 250 192.168.1.1
+```
 
-pong google.com --json | jq -r '.probes[0].status'
-or:
+Linux extended ICMP socket error reporting helps distinguish problems such as unreachable routes or destinations from ordinary timeouts. An unanswered ICMP request does **not** necessarily mean a device is offline; firewalls may drop probes silently.
 
-pong -c 3 google.com --json | jq -r '.probes[].rtt_ms'
-The JSON format contains a schema_version field so the structured interface can evolve while remaining identifiable to scripts.
+### IPv4 traceroute
 
-In v0.1.0, JSON output is intended for normal ping mode. Route, broadcast, and sweep JSON output are not yet implemented.
+Trace a network path using a changing IPv4 TTL and ICMP responses:
 
-TTL and Estimated Return Hops
-For successful Echo Replies, pong displays the received IPv4 TTL:
+```bash
+pong --route 1.1.1.1
+pong --route --max-hops 20 example.com
+pong --route -v -c 5 example.com
+pong --route --resolve example.com
+```
 
-1.1.1.1 ALIVE seq=1 ttl=59 hops≈5 time=56.182 ms
-hops≈5 is an estimate, not a measured route length.
+A `*` indicates that no usable hop response was received within the timeout; intermediate routers may suppress ICMP responses. `-v` enables per-hop latency/loss statistics, and `--resolve` requests reverse DNS names for responding hops. Reverse lookups can increase runtime. The default hop limit is 30.
 
-pong assumes a likely initial TTL of 64, 128, or 255 and calculates the approximate number of TTL decrements observed on the return path.
+### IPv4 network sweep
 
-Actual route tracing with:
+The sweep mode sends concurrent probes to identify responding IPv4 addresses. It supports automatic network detection, named interfaces, explicit address ranges, and CIDR/netmask definitions.
 
-pong --route TARGET
-measures the forward route separately.
-
-Forward and return paths on IP networks are not necessarily identical.
-
-Broadcast Interface Discovery
-The -b / --broadcast option currently identifies usable local IPv4 broadcast interfaces:
-
-pong -b
-A particular interface can be selected with:
-
-pong -b eth0
-The current v0.1.0 implementation enumerates the interface address and calculated broadcast address.
-
-Actual broadcast ICMP discovery is planned for a future release.
-
-IPv4 Sweep Framework
-pong contains the initial network-selection and safety framework for IPv4 host sweeping.
-
-Examples of supported range definitions include:
-
-pong -S
-Derive ranges from usable local IPv4 interfaces.
-
+```bash
 pong -S eth0
-Use a specific local interface.
-
-An explicit inclusive range can be specified:
-
 pong -S --low 192.168.1.20 --high 192.168.1.80
-A network and subnet mask can also be supplied:
-
-pong -S --network 192.168.1.0 --mask 255.255.255.0
-CIDR notation is supported:
-
 pong -S --network 192.168.1.0/24
-Sweep Safety
-The sweep framework applies safeguards to prevent accidental probing of unexpectedly large or public address ranges.
+pong -S --network 192.168.1.0 --mask 255.255.255.0
+pong -S eth0 --concurrency 32 -t 750 -i 20
+```
 
-Small RFC1918 private ranges are accepted automatically.
+By default the sweep concurrency limit is 16 outstanding probes. Range-size and address-space safety checks are enforced; `--yes` approves eligible large private-network sweeps and `--force` is required for certain otherwise restricted ranges. Use sweeps only on networks you own or are authorized to test.
 
-Larger RFC1918 ranges require confirmation:
+Sweep output lists responding IP addresses and can be redirected to a file:
 
-10.0.0.1 - 10.0.255.254
--y / --yes can automatically approve permitted RFC1918 private sweeps.
+```bash
+pong -S eth0 > hosts.txt
+```
 
-Non-RFC1918 ranges require the explicit:
+### IPv4 broadcast-capable interfaces
 
---force
-option.
+```bash
+pong -b
+pong -b eth0
+```
 
---force is also required for extremely large ranges.
+This mode lists local IPv4 interfaces with their addresses and broadcast addresses. **It is interface enumeration, not an active broadcast host scan.**
 
-These safeguards do not override malformed subnet masks or otherwise invalid network definitions.
+### IPv4 default gateway
 
-v0.1.0 note: The sweep engine itself is not yet implemented. The current implementation validates and calculates sweep ranges but does not yet transmit concurrent ICMP probes to those addresses.
+```bash
+pong --gateway
+pong --gateway eth0
+pong --gateway --json
+```
 
-Installation
-Build from Source
-pong requires Rust and Cargo.
+Shows default-route entries from the kernel routing tables, including next hop, interface, metric, and routing protocol where available. On systems with policy routing, multiple tables or defaults may appear; listing a route does not guarantee it is selected for every packet.
 
-Clone the repository:
+## IPv6 diagnostics
 
-git clone <repository-url>
+### IPv6 ping
+
+Use `-6` to select AAAA records when resolving a hostname, or supply an IPv6 literal directly:
+
+```bash
+pong -6 ::1
+pong -6 example.com -c 5
+pong -6 2606:4700:4700::1111 -c 3
+pong -6 ::1 -z
+```
+
+IPv6 link-local destinations require an interface scope because the same `fe80::/10` address can exist on more than one link:
+
+```bash
+pong -6 fe80::1%eth0 -c 3
+```
+
+IPv6 output includes the received hop limit (`hlim`), round-trip time, and packet statistics. The same count, size, timeout, interval, and JSON ping options are available.
+
+**DNS and reachability are separate:** a successful AAAA lookup does not demonstrate that the computer has an IPv6 address or default route capable of reaching the destination.
+
+### IPv6 traceroute
+
+```bash
+pong -6 --route 2606:4700:4700::1111
+pong -6 --route -v -c 3 example.com
+pong -6 --route --resolve --max-hops 64 example.com
+pong --route 2001:db8::1
+```
+
+Uses ICMPv6 probes with increasing Hop Limits to identify intermediate hops. IPv6 literals select IPv6 automatically when `-4` is not specified. Local routing failures are reported instead of being mistaken for a succession of unanswered probes. Unresponsive intermediate hops can still appear as `*`.
+
+### IPv6 interfaces and addresses
+
+```bash
+pong -6 --interfaces
+pong -6 --interfaces eth0
+pong -6 --interfaces --json
+```
+
+Shows IPv6 interface addresses and categorizes them as link-local, Unique Local Address (ULA), loopback, multicast, or global/other. It also shows IPv6 default-route information. This is read-only kernel-state inspection.
+
+### IPv6 default routers
+
+```bash
+pong -6 --gateway
+pong -6 --gateway eth0
+pong -6 --gateway --json
+```
+
+Displays IPv6 default-route entries. A default router is often represented by a link-local `fe80::` next-hop address associated with a particular interface. An interface with only a link-local address and no default route cannot normally reach the public IPv6 internet.
+
+### IPv6 Neighbor Discovery (NDP)
+
+IPv6 uses Neighbor Discovery instead of ARP. pong reads known neighbors from the local kernel cache:
+
+```bash
+pong -6 --neighbors
+pong -6 --neighbors eth0
+pong -6 --neighbors --json
+```
+
+Entries may include IPv6 addresses, MAC addresses, interfaces, and neighbor states. They describe **previously learned neighbors**, not every host physically present on the network.
+
+To show remote unicast candidates while excluding unsuitable or local addresses:
+
+```bash
+pong -6 --neighbors --peers eth0
+```
+
+Peer candidacy is not proof of current reachability. Cache inspection does not send active discovery packets.
+
+## ARP cache and device identification
+
+### Read the IPv4 ARP table
+
+```bash
+pong --arp
+pong --arp eth0
+pong --arp --json
+```
+
+ARP mode reads the Linux IPv4 neighbor cache and shows:
+
+- IPv4 address and associated MAC address
+- Network interface
+- Linux neighbor reachability state
+- Possible manufacturer from the offline IEEE OUI database
+
+Only entries with usable MAC mappings are displayed. Failed or incomplete ARP resolution attempts are omitted. **No ARP packets are transmitted by the cache-inspection command.**
+
+Typical states:
+
+| State | Meaning | Terminal color |
+| --- | --- | --- |
+| `REACHABLE` | The kernel recently verified neighbor reachability | Green |
+| `STALE` | A MAC mapping is known, but reachability has not been verified recently | Yellow |
+| `DELAY` | The kernel is briefly delaying its next verification probe | Cyan |
+| `PROBE` | The kernel is actively verifying an existing neighbor mapping | Magenta |
+
+`STALE` and `DELAY` do **not** mean that a device is offline. They describe the age and verification status of the kernel's neighbor entry. Likewise, an ARP cache entry without an ICMP reply is not proof of a responsive host.
+
+### MAC address manufacturer lookup
+
+pong matches the first 24 bits of a universally administered MAC address to an **IEEE MA-L OUI** assignment in the local registry. The result identifies the registered organization, which may be a network adapter vendor, board manufacturer, or original equipment manufacturer—not necessarily the retail device brand or model.
+
+Randomized or locally administered MAC addresses cannot generally be identified reliably from the OUI prefix. Missing matches are reported as `Unknown` or the appropriate address category.
+
+The OUI database lives at:
+
+```text
+~/.local/share/pong/oui.csv
+```
+
+To use a custom location:
+
+```bash
+PONG_OUI_FILE=/path/to/oui.csv pong --arp
+```
+
+### OUI database maintenance
+
+Manufacturer lookups are fully offline. Normal ARP commands **never download a database or perform a connectivity check**. Once the database is 90 days old, interactive ARP output shows a short reminder to update it; JSON remains free of reminders.
+
+```bash
+pong --oui-check              # Show database path, age, and status
+pong --oui-update             # Download only if missing or 90+ days old
+pong --oui-update --oui-force # Download regardless of age
+```
+
+Explicit updates download IEEE's published CSV over HTTPS using `curl`, validate it, and replace the local file only after validation. A failed update leaves the existing database intact. The database is not included in Git and should not contain local network inventory data.
+
+## DNS lookups
+
+```bash
+pong --dns example.com               # A and AAAA addresses
+pong -4 --dns example.com            # IPv4 A addresses only
+pong -6 --dns example.com            # IPv6 AAAA addresses only
+pong --reverse 1.1.1.1               # PTR lookup for IPv4
+pong -6 --reverse 2606:4700:4700::1111  # PTR lookup for IPv6
+```
+
+DNS lookups use the system's configured name-resolution services. Reverse lookup of responding traceroute hops uses the separate `--route --resolve` combination. Results can be absent even when an address is reachable.
+
+## JSON and shell integration
+
+Supported ping and read-only diagnostic modes can produce machine-readable JSON. For example:
+
+```bash
+pong --json 192.168.1.1 | jq '.probes'
+pong --arp --json | jq '.[] | {ip: .dst, mac: .lladdr, vendor}'
+pong -6 --neighbors --json | jq .
+pong --gateway --json | jq .
+```
+
+JSON support is mode-specific: route tracing and IPv4 sweeping do not currently expose the same JSON interface. Avoid relying on colored human-readable output for automated parsing.
+
+## Installation
+
+### Build from source
+
+Install a Rust toolchain (Rust edition 2024 support required), `git`, and Linux `iproute2`. The OUI download command additionally requires `curl`; `jq` is optional for working with JSON.
+
+```bash
+git clone https://github.com/BarkerDillinger/pong.git
 cd pong
-Build a release binary:
-
 cargo build --release
-The resulting executable will be:
-
-target/release/pong
-Install it for the current user:
 
 mkdir -p ~/.local/bin
 install -m 755 target/release/pong ~/.local/bin/pong
-Make sure ~/.local/bin is in your PATH.
+```
 
-Verify:
+Ensure `~/.local/bin` is on your `PATH`, then verify:
 
+```bash
 pong --version
 pong --help
-Linux ICMP Ping Sockets
-pong currently uses:
+pong --help6
+```
 
-AF_INET
-SOCK_DGRAM
-IPPROTO_ICMP
-rather than opening a raw IPv4 socket for ordinary ICMP Echo Requests.
+The repository's source-build procedure is supported on common Linux distributions such as Debian/Ubuntu, Fedora, and Arch. Binary compatibility depends on architecture and linked libraries; no universal precompiled installer is assumed here.
 
-On Linux, this allows unprivileged ICMP operation when the user's group is permitted by:
+### Permissions and dependencies
 
+pong uses unprivileged Linux ICMP datagram sockets for echo diagnostics. Whether they work for a given user depends on the system's ping socket policy, including `ping_group_range`:
+
+```bash
 sysctl net.ipv4.ping_group_range
-Check the current configuration with:
+sysctl net.ipv6.ping_group_range
+```
 
-sysctl net.ipv4.ping_group_range
-Therefore, under a normally configured Linux system, pong should not require root or CAP_NET_RAW for its normal IPv4 ping functionality.
+Passive ARP, NDP, interface, and route diagnostics use Linux kernel state; some invoke the `ip` utility from `iproute2`. They do not require root, raw packet capture, or special file capabilities. OUI updates require outbound HTTPS access and `curl` only when explicitly requested.
 
-Current Limitations
-Version 0.1.0 is intentionally an early IPv4/Linux implementation.
+## Safety and limitations
 
-Current limitations include:
+- **Linux only** in this release. macOS and Windows require platform-specific socket and networking backends.
+- Ping and traceroute responses can be filtered or rate-limited by devices and firewalls. A timeout is not proof of device failure.
+- ARP/NDP views reflect kernel caches, not complete live-network inventories.
+- OUI assignments identify registered organizations, not definitive device makes or models.
+- IPv6 link-local targets need a scope identifier such as `%eth0`.
+- IPv6 DNS resolution may work over IPv4 even when no usable IPv6 route is configured.
+- IPv4 sweep is active probing. Use it only on networks where you have permission.
+- Normal operation does not require `sudo` or raw sockets; local OS settings may restrict unprivileged ICMP.
 
-Linux only
-IPv4 only
-No ICMPv6 support
-No IPv6 route tracing
-No IPv6 Neighbor Discovery
-Broadcast mode currently enumerates interfaces rather than probing
-Sweep mode currently calculates and validates ranges rather than probing
-JSON output is currently limited to normal ping mode
-Route probing is currently sequential
-Reverse DNS is synchronous
-These limitations provide areas for continued development rather than being hidden behind incomplete interfaces.
+## Development and testing
 
-Planned Development
-Potential future development includes:
+```bash
+cargo fmt --check
+cargo test --locked
+cargo clippy --locked --all-targets -- -D warnings
+cargo build --release --locked
+```
 
-Concurrent IPv4 host sweeping
-IPv4 broadcast discovery
-IPv6 / ICMPv6 support
-IPv6 Neighbor Discovery
-JSON route output
-JSON sweep output
-Improved route probe correlation and multipath reporting
-Fixed per-probe deadlines using event-driven socket polling
-Source address/interface selection
-IPv6 -6 and IPv4 -4 selection
-Additional machine-readable network diagnostics
-The longer-term goal is to keep pong useful as a small command-line networking utility while also keeping the low-level networking implementation understandable.
+Project test scripts, where available, can be run from the repository root:
 
-Why pong?
-This project is also intended as a practical exploration of networking and systems programming in Rust.
+```bash
+script/test_pong.sh
+script/test_ipv6.sh
+```
 
-Rather than hiding ICMP behind a high-level packet library, the implementation works directly with operating-system networking interfaces and manually handles several pieces of the protocol.
+Local network-specific test settings should remain in `script/test.txt` and are ignored by Git. Do not commit private network inventory, locally downloaded OUI databases, or temporary installer backup files.
 
-Development has included:
+## Project and license
 
-ICMP Echo packet construction
-Internet checksum calculation
-Linux ICMP datagram sockets
-sendto() and recvmsg()
-Ancillary control messages
-Received TTL extraction
-Linux extended socket error queues
-sock_extended_err
-ICMP error classification
-Probe sequence correlation
-IPv4 interface enumeration with getifaddrs()
-IPv4 subnet and broadcast calculation
-CIDR and subnet-mask handling
-Route tracing through TTL manipulation
-RTT statistics
-Structured serialization with Serde
-Because of this, some functionality that could be obtained from an existing high-level networking crate is deliberately implemented closer to the operating-system networking API.
+Source code: [github.com/BarkerDillinger/pong](https://github.com/BarkerDillinger/pong)
 
-License
-MIT License
+pong was created as a Rust networking and systems-programming project, with an emphasis on understandable socket-level behavior, useful diagnostics, and straightforward terminal operation.
 
-Copyright (c) 2026 Derek L. Knowlton
-
-Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFpongEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+Distributed under the **MIT License**. See [LICENSE](LICENSE).
+IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
